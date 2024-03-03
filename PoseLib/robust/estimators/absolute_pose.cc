@@ -59,7 +59,39 @@ void AbsolutePoseEstimator::refine_model(CameraPose *pose) const {
 
     // TODO: for high outlier scenarios, make a copy of (x,X) and find points close to inlier threshold
     // TODO: experiment with good thresholds for copy vs iterating full point set
-    bundle_adjust(x, X, pose, bundle_opt);
+    // bundle_adjust(x, X, pose, bundle_opt);
+}
+
+void AbsolutePoseGravityEstimator::generate_models(std::vector<CameraPose> *models) {
+    sampler.generate_sample(&sample);
+    for (size_t k = 0; k < sample_sz; ++k) {
+        xs[k] = x[sample[k]].homogeneous().normalized();
+        Xs[k] = X[sample[k]];
+    }
+    p3p(xs, Xs, models);
+}
+
+double AbsolutePoseGravityEstimator::score_model(const CameraPose &pose, size_t *inlier_count) const {
+    double cossim = gravity_query.dot(pose.R().col(2));
+    double grav_angle_deg = 180.0 * std::acos(std::clamp(cossim, -1.0, 1.0)) / 3.14159265358979323846;
+
+    double reward = (grav_angle_deg > gravity_uncertainty) ? 1.0 : 2.0;
+    // if (grav_angle_deg > gravity_uncertainty) {
+    //     *inlier_count = 0;
+    //     return 100000000000.; // we use random high value for now
+    // }
+    return reward * compute_msac_score(pose, x, X, opt.max_reproj_error * opt.max_reproj_error, inlier_count);
+}
+
+void AbsolutePoseGravityEstimator::refine_model(CameraPose *pose) const {
+    BundleOptions bundle_opt;
+    bundle_opt.loss_type = BundleOptions::LossType::TRUNCATED;
+    bundle_opt.loss_scale = opt.max_reproj_error;
+    bundle_opt.max_iterations = 25;
+
+    // TODO: for high outlier scenarios, make a copy of (x,X) and find points close to inlier threshold
+    // TODO: experiment with good thresholds for copy vs iterating full point set
+    // bundle_adjust(x, X, pose, bundle_opt);
 }
 
 void GeneralizedAbsolutePoseEstimator::generate_models(std::vector<CameraPose> *models) {

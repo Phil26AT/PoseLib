@@ -65,6 +65,40 @@ class AbsolutePoseEstimator {
     std::vector<size_t> sample;
 };
 
+class AbsolutePoseGravityEstimator {
+  public:
+    AbsolutePoseGravityEstimator(const RansacOptions &ransac_opt, const std::vector<Point2D> &points2D,
+                                 const std::vector<Point3D> &points3D, const Eigen::Vector3d &gravity_q,
+                                 const double gravity_unc)
+        : num_data(points2D.size()), opt(ransac_opt), x(points2D), X(points3D), gravity_query(gravity_q),
+          gravity_uncertainty(gravity_unc),
+          sampler(num_data, sample_sz, opt.seed, opt.progressive_sampling, opt.max_prosac_iterations) {
+        xs.resize(sample_sz);
+        Xs.resize(sample_sz);
+        sample.resize(sample_sz);
+    }
+
+    void generate_models(std::vector<CameraPose> *models);
+    double score_model(const CameraPose &pose, size_t *inlier_count) const;
+    void refine_model(CameraPose *pose) const;
+
+    const size_t sample_sz = 3;
+    const size_t num_data;
+
+  private:
+    const RansacOptions &opt;
+    const std::vector<Point2D> &x;
+    const std::vector<Point3D> &X;
+
+    Eigen::Vector3d gravity_query;
+    double gravity_uncertainty;
+
+    RandomSampler sampler;
+    // pre-allocated vectors for sampling
+    std::vector<Point3D> xs, Xs;
+    std::vector<size_t> sample;
+};
+
 class GeneralizedAbsolutePoseEstimator {
   public:
     GeneralizedAbsolutePoseEstimator(const RansacOptions &ransac_opt, const std::vector<std::vector<Point2D>> &points2D,

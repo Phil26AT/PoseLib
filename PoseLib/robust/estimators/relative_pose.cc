@@ -33,6 +33,10 @@
 #include "PoseLib/solvers/gen_relpose_5p1pt.h"
 #include "PoseLib/solvers/relpose_5pt.h"
 #include "PoseLib/solvers/relpose_7pt.h"
+#include "PoseLib/solvers/relpose_upright_3pt.h"
+
+#include <cmath>
+#include <iostream>
 
 namespace poselib {
 
@@ -73,6 +77,166 @@ void RelativePoseEstimator::refine_model(CameraPose *pose) const {
         }
     }
     refine_relpose(x1_inlier, x2_inlier, pose, bundle_opt);
+}
+
+void RelativePoseUprightEstimator::generate_models(std::vector<CameraPose> *models) {
+    sampler.generate_sample(&sample);
+    for (size_t k = 0; k < sample_sz; ++k) {
+        x1s[k] = x1[sample[k]].homogeneous().normalized();
+        x2s[k] = x2[sample[k]].homogeneous().normalized();
+    }
+    // Here we channge the call to relpose_5 to 3p_up
+    // WARNING: maybe we should not give models in param
+    relpose_upright_3pt(x1s, x2s, models); // here check inputs
+}
+
+double RelativePoseUprightEstimator::score_model(const CameraPose &pose, size_t *inlier_count) const {
+    // IMO: nothing to change here (double check compute method tho)
+    return compute_sampson_msac_score(pose, x1, x2, opt.max_epipolar_error * opt.max_epipolar_error, inlier_count);
+}
+
+void RelativePoseUprightEstimator::refine_model(CameraPose *pose) const {
+    // IMO: Only change 5 values into 3
+    BundleOptions bundle_opt;
+    bundle_opt.loss_type = BundleOptions::LossType::TRUNCATED;
+    bundle_opt.loss_scale = opt.max_epipolar_error;
+    bundle_opt.max_iterations = 25;
+
+    // // Find approximate inliers and bundle over these with a truncated loss
+    // std::vector<char> inliers;
+    // int num_inl = get_inliers(*pose, x1, x2, 3 * (opt.max_epipolar_error * opt.max_epipolar_error), &inliers); //
+    // std::vector<Eigen::Vector2d> x1_inlier, x2_inlier;
+    // x1_inlier.reserve(num_inl);
+    // x2_inlier.reserve(num_inl);
+
+    // if (num_inl <= 3) { // here
+    //     return;
+    // }
+
+    // for (size_t pt_k = 0; pt_k < x1.size(); ++pt_k) {
+    //     if (inliers[pt_k]) {
+    //         x1_inlier.push_back(x1[pt_k]);
+    //         x2_inlier.push_back(x2[pt_k]);
+    //     }
+    // }
+    // refine_relpose(x1_inlier, x2_inlier, pose, bundle_opt);
+}
+
+void RelativePoseGravityEstimator::generate_models(std::vector<CameraPose> *models) {
+    sampler.generate_sample(&sample);
+    for (size_t k = 0; k < sample_sz; ++k) {
+        x1s[k] = x1[sample[k]].homogeneous().normalized();
+        x2s[k] = x2[sample[k]].homogeneous().normalized();
+    }
+    // Here we channge the call to relpose_5 to 3p_up
+    // WARNING: maybe we should not give models in param
+    relpose_5pt(x1s, x2s, models);
+}
+
+double RelativePoseGravityEstimator::score_model(const CameraPose &pose, size_t *inlier_count) const {
+    // We first check for consistency of rotation matrix with gravity
+    double grav_angle_deg = 180.0 * std::acos(g2.dot(pose.R() * g1)) / 3.14159265358979323846;
+    // if (grav_angle_deg > gu) {
+    //     *inlier_count = 0;
+    //     return 1000000000.; // we use random high value for now
+    // }
+
+    double reward = ((grav_angle_deg > gu) ? 2.0 : 1.0);
+
+    return reward *
+           compute_sampson_msac_score(pose, x1, x2, opt.max_epipolar_error * opt.max_epipolar_error, inlier_count);
+}
+
+void RelativePoseGravityEstimator::refine_model(CameraPose *pose) const {
+    // IMO: Only change 5 values into 3
+    BundleOptions bundle_opt;
+    bundle_opt.loss_type = BundleOptions::LossType::TRUNCATED;
+    bundle_opt.loss_scale = opt.max_epipolar_error;
+    bundle_opt.max_iterations = 25;
+
+    // // Find approximate inliers and bundle over these with a truncated loss
+    // std::vector<char> inliers;
+    // int num_inl = get_inliers(*pose, x1, x2, 5 * (opt.max_epipolar_error * opt.max_epipolar_error), &inliers); //
+    // std::vector<Eigen::Vector2d> x1_inlier, x2_inlier;
+    // x1_inlier.reserve(num_inl);
+    // x2_inlier.reserve(num_inl);
+
+    // if (num_inl <= 5) { // here
+    //     return;
+    // }
+
+    // for (size_t pt_k = 0; pt_k < x1.size(); ++pt_k) {
+    //     if (inliers[pt_k]) {
+    //         x1_inlier.push_back(x1[pt_k]);
+    //         x2_inlier.push_back(x2[pt_k]);
+    //     }
+    // }
+    // refine_relpose(x1_inlier, x2_inlier, pose, bundle_opt);
+}
+
+void RelativePoseHybridEstimator::generate_models(std::vector<CameraPose> *models) {
+    sampler.generate_sample(&sample);
+    if (gu > 1) {  // do not trust gravity, run 5pt
+        for (size_t k = 0; k < sample_sz; ++k) {
+            x1s[k] = x1[sample[k]].homogeneous().normalized();
+            x2s[k] = x2[sample[k]].homogeneous().normalized();
+        }
+        relpose_5pt(x1s, x2s, models);
+    } else {
+        for (size_t k = 0; k < x1sg.size(); ++k) {
+            x1sg[k] = (Rg1 * x1[sample[k]].homogeneous()).normalized();
+            x2sg[k] = (Rg2 * x2[sample[k]].homogeneous()).normalized();
+        }
+        // Here we channge the call to relpose_5 to 3p_up
+        // WARNING: maybe we should not give models in param
+        relpose_upright_3pt(x1sg, x2sg, models); // here check inputs
+
+        // Rotate back
+        for (size_t i = 0; i < models->size(); i++) {
+            CameraPose &gj_T_gi = (*models)[i];
+            Eigen::Matrix3d j_R_i = Rg2.transpose() * gj_T_gi.R() * Rg1;
+            Eigen::Vector3d j_t_i = Rg2.transpose() * gj_T_gi.t;
+            (*models)[i] = CameraPose(j_R_i, j_t_i);
+        }
+    }   
+    
+}
+
+double RelativePoseHybridEstimator::score_model(const CameraPose &pose, size_t *inlier_count) const {
+    // We first check for consistency of rotation matrix with gravity
+    // double grav_angle_deg = 180.0 * std::acos(g2.dot(pose.R() * g1)) / 3.14159265358979323846;
+    // if (grav_angle_deg > gu) {
+    //     *inlier_count = 0;
+    //     return 1000000000.; // we use random high value for now
+    // }
+    return compute_sampson_msac_score(pose, x1, x2, opt.max_epipolar_error * opt.max_epipolar_error, inlier_count);
+}
+
+void RelativePoseHybridEstimator::refine_model(CameraPose *pose) const {
+    // IMO: Only change 5 values into 3
+    BundleOptions bundle_opt;
+    bundle_opt.loss_type = BundleOptions::LossType::TRUNCATED;
+    bundle_opt.loss_scale = opt.max_epipolar_error;
+    bundle_opt.max_iterations = 25;
+
+    // // Find approximate inliers and bundle over these with a truncated loss
+    // std::vector<char> inliers;
+    // int num_inl = get_inliers(*pose, x1, x2, 5 * (opt.max_epipolar_error * opt.max_epipolar_error), &inliers); //
+    // std::vector<Eigen::Vector2d> x1_inlier, x2_inlier;
+    // x1_inlier.reserve(num_inl);
+    // x2_inlier.reserve(num_inl);
+
+    // if (num_inl <= 5) { // here
+    //     return;
+    // }
+
+    // for (size_t pt_k = 0; pt_k < x1.size(); ++pt_k) {
+    //     if (inliers[pt_k]) {
+    //         x1_inlier.push_back(x1[pt_k]);
+    //         x2_inlier.push_back(x2[pt_k]);
+    //     }
+    // }
+    // refine_relpose(x1_inlier, x2_inlier, pose, bundle_opt);
 }
 
 void GeneralizedRelativePoseEstimator::generate_models(std::vector<CameraPose> *models) {

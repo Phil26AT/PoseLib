@@ -260,6 +260,34 @@ std::pair<CameraPose, py::dict> estimate_absolute_pose_wrapper(const std::vector
     return std::make_pair(pose, output_dict);
 }
 
+std::pair<CameraPose, py::dict>
+estimate_absolute_pose_gravity_wrapper(const std::vector<Eigen::Vector2d> &points2D,
+                                       const std::vector<Eigen::Vector3d> &points3D, const py::dict &camera_dict,
+                                       const Eigen::Vector3d &gravity_query, const double gravity_uncertainty,
+                                       const py::dict &ransac_opt_dict, const py::dict &bundle_opt_dict) {
+
+    Camera camera = camera_from_dict(camera_dict);
+
+    RansacOptions ransac_opt;
+    update_ransac_options(ransac_opt_dict, ransac_opt);
+
+    BundleOptions bundle_opt;
+    bundle_opt.loss_scale = 0.5 * ransac_opt.max_reproj_error;
+    update_bundle_options(bundle_opt_dict, bundle_opt);
+
+    CameraPose pose;
+    std::vector<char> inlier_mask;
+
+    RansacStats stats = estimate_absolute_pose_gravity(points2D, points3D, camera, gravity_query, gravity_uncertainty,
+                                                       ransac_opt, bundle_opt, &pose, &inlier_mask);
+
+    py::dict output_dict;
+    write_to_dict(stats, output_dict);
+    output_dict["inliers"] = convert_inlier_vector(inlier_mask);
+
+    return std::make_pair(pose, output_dict);
+}
+
 std::pair<CameraPose, py::dict> refine_absolute_pose_wrapper(const std::vector<Eigen::Vector2d> points2D,
                                                              const std::vector<Eigen::Vector3d> points3D,
                                                              const CameraPose initial_pose, const py::dict &camera_dict,
@@ -452,6 +480,93 @@ std::pair<CameraPose, py::dict> estimate_relative_pose_wrapper(const std::vector
 
     RansacStats stats =
         estimate_relative_pose(points2D_1, points2D_2, camera1, camera2, ransac_opt, bundle_opt, &pose, &inlier_mask);
+
+    py::dict output_dict;
+    write_to_dict(stats, output_dict);
+    output_dict["inliers"] = convert_inlier_vector(inlier_mask);
+    return std::make_pair(pose, output_dict);
+}
+
+std::pair<CameraPose, py::dict>
+estimate_relative_pose_gravity_wrapper(const std::vector<Eigen::Vector2d> points2D_1,
+                                       const std::vector<Eigen::Vector2d> points2D_2, const py::dict &camera1_dict,
+                                       const py::dict &camera2_dict, const Eigen::Vector3d &gravity1,
+                                       const Eigen::Vector3d &gravity2, double gravity_uncertainty,
+                                       const py::dict &ransac_opt_dict, const py::dict &bundle_opt_dict) {
+
+    Camera camera1 = camera_from_dict(camera1_dict);
+    Camera camera2 = camera_from_dict(camera2_dict);
+
+    RansacOptions ransac_opt;
+    update_ransac_options(ransac_opt_dict, ransac_opt);
+
+    BundleOptions bundle_opt;
+    bundle_opt.loss_scale = 0.5 * ransac_opt.max_epipolar_error;
+    update_bundle_options(bundle_opt_dict, bundle_opt);
+
+    CameraPose pose;
+    std::vector<char> inlier_mask;
+
+    RansacStats stats =
+        estimate_relative_pose_gravity(points2D_1, points2D_2, camera1, camera2, gravity1, gravity2,
+                                       gravity_uncertainty, ransac_opt, bundle_opt, &pose, &inlier_mask);
+
+    py::dict output_dict;
+    write_to_dict(stats, output_dict);
+    output_dict["inliers"] = convert_inlier_vector(inlier_mask);
+    return std::make_pair(pose, output_dict);
+}
+
+std::pair<CameraPose, py::dict>
+estimate_relative_pose_hybrid_wrapper(const std::vector<Eigen::Vector2d> points2D_1,
+                                      const std::vector<Eigen::Vector2d> points2D_2, const py::dict &camera1_dict,
+                                      const py::dict &camera2_dict, const Eigen::Vector3d &gravity1,
+                                      const Eigen::Vector3d &gravity2, double gravity_uncertainty,
+                                      const py::dict &ransac_opt_dict, const py::dict &bundle_opt_dict) {
+
+    Camera camera1 = camera_from_dict(camera1_dict);
+    Camera camera2 = camera_from_dict(camera2_dict);
+
+    RansacOptions ransac_opt;
+    update_ransac_options(ransac_opt_dict, ransac_opt);
+
+    BundleOptions bundle_opt;
+    bundle_opt.loss_scale = 0.5 * ransac_opt.max_epipolar_error;
+    update_bundle_options(bundle_opt_dict, bundle_opt);
+
+    CameraPose pose;
+    std::vector<char> inlier_mask;
+
+    RansacStats stats = estimate_relative_pose_hybrid(points2D_1, points2D_2, camera1, camera2, gravity1, gravity2,
+                                                      gravity_uncertainty, ransac_opt, bundle_opt, &pose, &inlier_mask);
+
+    py::dict output_dict;
+    write_to_dict(stats, output_dict);
+    output_dict["inliers"] = convert_inlier_vector(inlier_mask);
+    return std::make_pair(pose, output_dict);
+}
+
+std::pair<CameraPose, py::dict>
+estimate_relative_pose_upright_3pt_wrapper(const std::vector<Eigen::Vector2d> points2D_1,
+                                           const std::vector<Eigen::Vector2d> points2D_2, const py::dict &camera1_dict,
+                                           const py::dict &camera2_dict, const py::dict &ransac_opt_dict,
+                                           const py::dict &bundle_opt_dict) {
+
+    Camera camera1 = camera_from_dict(camera1_dict);
+    Camera camera2 = camera_from_dict(camera2_dict);
+
+    RansacOptions ransac_opt;
+    update_ransac_options(ransac_opt_dict, ransac_opt);
+
+    BundleOptions bundle_opt;
+    bundle_opt.loss_scale = 0.5 * ransac_opt.max_epipolar_error;
+    update_bundle_options(bundle_opt_dict, bundle_opt);
+
+    CameraPose pose;
+    std::vector<char> inlier_mask;
+
+    RansacStats stats = estimate_relative_pose_upright_3pt(points2D_1, points2D_2, camera1, camera2, ransac_opt,
+                                                           bundle_opt, &pose, &inlier_mask);
 
     py::dict output_dict;
     write_to_dict(stats, output_dict);
@@ -793,6 +908,10 @@ PYBIND11_MODULE(poselib, m) {
     m.def("estimate_absolute_pose", &poselib::estimate_absolute_pose_wrapper, py::arg("points2D"), py::arg("points3D"),
           py::arg("camera_dict"), py::arg("ransac_opt") = py::dict(), py::arg("bundle_opt") = py::dict(),
           "Absolute pose estimation with non-linear refinement.");
+    m.def("estimate_absolute_pose_gravity", &poselib::estimate_absolute_pose_gravity_wrapper, py::arg("points2D"),
+          py::arg("points3D"), py::arg("camera_dict"), py ::arg("gravity_query"), py::arg("gravity_uncertainty"),
+          py::arg("ransac_opt") = py::dict(), py::arg("bundle_opt") = py::dict(),
+          "Absolute pose estimation with non-linear refinement and gravity.");
     m.def("estimate_absolute_pose_pnpl", &poselib::estimate_absolute_pose_pnpl_wrapper, py::arg("points2D"),
           py::arg("points3D"), py::arg("lines2D_1"), py::arg("lines2D_2"), py::arg("lines3D_1"), py::arg("lines3D_2"),
           py::arg("camera_dict"), py::arg("ransac_opt") = py::dict(), py::arg("bundle_opt") = py::dict(),
@@ -803,6 +922,18 @@ PYBIND11_MODULE(poselib, m) {
           "Generalized absolute pose estimation with non-linear refinement.");
     m.def("estimate_relative_pose", &poselib::estimate_relative_pose_wrapper, py::arg("points2D_1"),
           py::arg("points2D_2"), py::arg("camera1_dict"), py::arg("camera2_dict"), py::arg("ransac_opt") = py::dict(),
+          py::arg("bundle_opt") = py::dict(), "Relative pose estimation with non-linear refinement.");
+    m.def("estimate_relative_pose_upright_3pt", &poselib::estimate_relative_pose_upright_3pt_wrapper,
+          py::arg("points2D_1"), py::arg("points2D_2"), py::arg("camera1_dict"), py::arg("camera2_dict"),
+          py::arg("ransac_opt") = py::dict(), py::arg("bundle_opt") = py::dict(),
+          "Relative pose estimation with non-linear refinement.");
+    m.def("estimate_relative_pose_gravity", &poselib::estimate_relative_pose_gravity_wrapper, py::arg("points2D_1"),
+          py::arg("points2D_2"), py::arg("camera1_dict"), py::arg("camera2_dict"), py::arg("gravity_1"),
+          py::arg("gravity_2"), py::arg("gravity_uncertainty"), py::arg("ransac_opt") = py::dict(),
+          py::arg("bundle_opt") = py::dict(), "Relative pose estimation with non-linear refinement.");
+    m.def("estimate_relative_pose_hybrid", &poselib::estimate_relative_pose_hybrid_wrapper, py::arg("points2D_1"),
+          py::arg("points2D_2"), py::arg("camera1_dict"), py::arg("camera2_dict"), py::arg("gravity_1"),
+          py::arg("gravity_2"), py::arg("gravity_uncertainty"), py::arg("ransac_opt") = py::dict(),
           py::arg("bundle_opt") = py::dict(), "Relative pose estimation with non-linear refinement.");
     m.def("estimate_fundamental", &poselib::estimate_fundamental_wrapper, py::arg("points2D_1"), py::arg("points2D_2"),
           py::arg("ransac_opt") = py::dict(), py::arg("bundle_opt") = py::dict(),

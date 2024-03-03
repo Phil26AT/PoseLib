@@ -40,6 +40,10 @@ namespace poselib {
 RansacStats ransac_pnp(const std::vector<Point2D> &x, const std::vector<Point3D> &X, const RansacOptions &opt,
                        CameraPose *best_model, std::vector<char> *best_inliers);
 
+RansacStats ransac_pnpg(const std::vector<Point2D> &x, const std::vector<Point3D> &X, const Eigen::Vector3d &gq,
+                        const double gu, const RansacOptions &opt, CameraPose *best_model,
+                        std::vector<char> *best_inliers);
+
 RansacStats ransac_gen_pnp(const std::vector<std::vector<Point2D>> &x, const std::vector<std::vector<Point3D>> &X,
                            const std::vector<CameraPose> &camera_ext, const RansacOptions &opt, CameraPose *best_model,
                            std::vector<std::vector<char>> *best_inliers);
@@ -52,6 +56,18 @@ RansacStats ransac_pnpl(const std::vector<Point2D> &points2D, const std::vector<
 // Relative pose estimation
 RansacStats ransac_relpose(const std::vector<Point2D> &x1, const std::vector<Point2D> &x2, const RansacOptions &opt,
                            CameraPose *best_model, std::vector<char> *best_inliers);
+
+RansacStats ransac_relpose_upright_3pt(const std::vector<Point2D> &x1, const std::vector<Point2D> &x2,
+                                       const RansacOptions &opt, CameraPose *best_model,
+                                       std::vector<char> *best_inliers);
+
+RansacStats ransac_relpose_gravity(const std::vector<Point2D> &x1, const std::vector<Point2D> &x2,
+                                   const Eigen::Vector3d &g1, const Eigen::Vector3d &g2, const double gu,
+                                   const RansacOptions &opt, CameraPose *best_model, std::vector<char> *best_inliers);
+
+RansacStats ransac_relpose_hybrid(const std::vector<Point2D> &x1, const std::vector<Point2D> &x2,
+                                  const Eigen::Vector3d &g1, const Eigen::Vector3d &g2, const double gu,
+                                  const RansacOptions &opt, CameraPose *best_model, std::vector<char> *best_inliers);
 
 RansacStats ransac_fundamental(const std::vector<Point2D> &x1, const std::vector<Point2D> &x2, const RansacOptions &opt,
                                Eigen::Matrix3d *best_model, std::vector<char> *best_inliers);

@@ -65,6 +65,131 @@ class RelativePoseEstimator {
     std::vector<size_t> sample;
 };
 
+class RelativePoseGravityEstimator {
+  public:
+    RelativePoseGravityEstimator(const RansacOptions &ransac_opt, const std::vector<Point2D> &points2D_1,
+                                 const std::vector<Point2D> &points2D_2, const Eigen::Vector3d &gravity_1,
+                                 const Eigen::Vector3d &gravity_2, const double gravity_uncertainty)
+        : num_data(points2D_1.size()), opt(ransac_opt), x1(points2D_1), x2(points2D_2), g1(gravity_1), g2(gravity_2),
+          gu(gravity_uncertainty),
+          sampler(num_data, sample_sz, opt.seed, opt.progressive_sampling, opt.max_prosac_iterations) {
+        x1s.resize(sample_sz);
+        x2s.resize(sample_sz);
+        sample.resize(sample_sz);
+    }
+
+    void generate_models(std::vector<CameraPose> *models);
+    double score_model(const CameraPose &pose, size_t *inlier_count) const;
+    void refine_model(CameraPose *pose) const;
+
+    const size_t sample_sz = 5;
+    const size_t num_data;
+
+  private:
+    const RansacOptions &opt;
+    const std::vector<Point2D> &x1;
+    const std::vector<Point2D> &x2;
+    const Eigen::Vector3d &g1;
+    const Eigen::Vector3d &g2;
+    double gu;
+
+    RandomSampler sampler;
+    // pre-allocated vectors for sampling
+    std::vector<Eigen::Vector3d> x1s, x2s;
+    std::vector<size_t> sample;
+};
+
+// def R_from_rp(roll: torch.Tensor, pitch: torch.Tensor) -> torch.Tensor:
+//     R = Rotation.from_euler("ZX", (roll.cpu(), pitch.cpu()), degrees=False).as_matrix()
+//     return torch.from_numpy(R).to(roll)
+
+// def rp_from_gravity(gravity: torch.Tensor, eps=1e-4) -> Tuple[torch.Tensor]:
+//     x, z = gravity[..., 0], gravity[..., 2]
+//     roll = torch.asin(-x / (torch.sqrt(1 - z**2) + eps))
+//     pitch = torch.asin(z)
+//     return roll, pitch
+
+inline Eigen::Matrix3d R_from_gravity(const Eigen::Vector3d &g) {
+    double roll = std::asin(-g.x() / std::sqrt(1 - g.z() * g.z()) + 0.0001);
+    double pitch = std::asin(g.z());
+
+    Eigen::Matrix3d R;
+    R = Eigen::AngleAxisd(roll, Eigen::Vector3d::UnitZ()) * Eigen::AngleAxisd(pitch, Eigen::Vector3d::UnitX());
+
+    return R;
+}
+
+class RelativePoseHybridEstimator {
+  public:
+    RelativePoseHybridEstimator(const RansacOptions &ransac_opt, const std::vector<Point2D> &points2D_1,
+                                const std::vector<Point2D> &points2D_2, const Eigen::Vector3d &gravity_1,
+                                const Eigen::Vector3d &gravity_2, const double gravity_uncertainty)
+        : num_data(points2D_1.size()), opt(ransac_opt), x1(points2D_1), x2(points2D_2), g1(gravity_1), g2(gravity_2),
+          gu(gravity_uncertainty),
+          sampler(num_data, sample_sz, opt.seed, opt.progressive_sampling, opt.max_prosac_iterations) {
+        x1s.resize(sample_sz);
+        x2s.resize(sample_sz);
+        x1sg.resize(3);
+        x2sg.resize(3);
+        sample.resize(sample_sz);
+        Rg1 = R_from_gravity(g1);
+        Rg2 = R_from_gravity(g2);
+    }
+
+    void generate_models(std::vector<CameraPose> *models);
+    double score_model(const CameraPose &pose, size_t *inlier_count) const;
+    void refine_model(CameraPose *pose) const;
+
+    const size_t sample_sz = 5;
+    const size_t num_data;
+
+  private:
+    const RansacOptions &opt;
+    const std::vector<Point2D> &x1;
+    const std::vector<Point2D> &x2;
+    const Eigen::Vector3d &g1;
+    const Eigen::Vector3d &g2;
+
+    Eigen::Matrix3d Rg1;
+    Eigen::Matrix3d Rg2;
+    double gu;
+
+    RandomSampler sampler;
+    // pre-allocated vectors for sampling
+    std::vector<Eigen::Vector3d> x1s, x2s;
+    std::vector<Eigen::Vector3d> x1sg, x2sg;
+    std::vector<size_t> sample;
+};
+
+class RelativePoseUprightEstimator {
+  public:
+    RelativePoseUprightEstimator(const RansacOptions &ransac_opt, const std::vector<Point2D> &points2D_1,
+                                 const std::vector<Point2D> &points2D_2)
+        : num_data(points2D_1.size()), opt(ransac_opt), x1(points2D_1), x2(points2D_2),
+          sampler(num_data, sample_sz, opt.seed, opt.progressive_sampling, opt.max_prosac_iterations) {
+        x1s.resize(sample_sz);
+        x2s.resize(sample_sz);
+        sample.resize(sample_sz);
+    }
+
+    void generate_models(std::vector<CameraPose> *models);
+    double score_model(const CameraPose &pose, size_t *inlier_count) const;
+    void refine_model(CameraPose *pose) const;
+
+    const size_t sample_sz = 3; // here I changed 5 into 3, is it correct to do so ?
+    const size_t num_data;
+
+  private:
+    const RansacOptions &opt;
+    const std::vector<Point2D> &x1;
+    const std::vector<Point2D> &x2;
+
+    RandomSampler sampler;
+    // pre-allocated vectors for sampling
+    std::vector<Eigen::Vector3d> x1s, x2s;
+    std::vector<size_t> sample;
+};
+
 class GeneralizedRelativePoseEstimator {
   public:
     GeneralizedRelativePoseEstimator(const RansacOptions &ransac_opt,
