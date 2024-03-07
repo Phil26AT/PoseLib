@@ -141,7 +141,7 @@ double RelativePoseGravityEstimator::score_model(const CameraPose &pose, size_t 
     //     return 1000000000.; // we use random high value for now
     // }
 
-    double reward = ((grav_angle_deg > gu) ? 2.0 : 1.0);
+    double reward = ((grav_angle_deg > gu) ? 1.0 : 0.5);
 
     return reward *
            compute_sampson_msac_score(pose, x1, x2, opt.max_epipolar_error * opt.max_epipolar_error, inlier_count);
@@ -176,7 +176,7 @@ void RelativePoseGravityEstimator::refine_model(CameraPose *pose) const {
 
 void RelativePoseHybridEstimator::generate_models(std::vector<CameraPose> *models) {
     sampler.generate_sample(&sample);
-    if (gu > 1) {  // do not trust gravity, run 5pt
+    if (gu > 1) { // do not trust gravity, run 5pt
         for (size_t k = 0; k < sample_sz; ++k) {
             x1s[k] = x1[sample[k]].homogeneous().normalized();
             x2s[k] = x2[sample[k]].homogeneous().normalized();
@@ -198,8 +198,7 @@ void RelativePoseHybridEstimator::generate_models(std::vector<CameraPose> *model
             Eigen::Vector3d j_t_i = Rg2.transpose() * gj_T_gi.t;
             (*models)[i] = CameraPose(j_R_i, j_t_i);
         }
-    }   
-    
+    }
 }
 
 double RelativePoseHybridEstimator::score_model(const CameraPose &pose, size_t *inlier_count) const {
