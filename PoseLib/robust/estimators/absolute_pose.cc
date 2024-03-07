@@ -36,6 +36,8 @@
 #include "PoseLib/solvers/p3p.h"
 #include "PoseLib/solvers/p5lp_radial.h"
 
+#include <iostream>
+
 namespace poselib {
 
 void AbsolutePoseEstimator::generate_models(std::vector<CameraPose> *models) {
@@ -75,11 +77,13 @@ double AbsolutePoseGravityEstimator::score_model(const CameraPose &pose, size_t 
     double cossim = gravity_query.dot(pose.R().col(2));
     double grav_angle_deg = 180.0 * std::acos(std::clamp(cossim, -1.0, 1.0)) / 3.14159265358979323846;
 
-    double reward = (grav_angle_deg > gravity_uncertainty) ? 1.0 : 2.0;
-    // if (grav_angle_deg > gravity_uncertainty) {
-    //     *inlier_count = 0;
-    //     return 100000000000.; // we use random high value for now
-    // }
+    double reward = (grav_angle_deg > gravity_uncertainty) ? 1.0 : 0.5;
+    // double r = 1.0 / 2.0;
+    // double reward = std::clamp((1.0 - r) / gravity_uncertainty * grav_angle_deg + r, r, 1.0);
+
+    // double tau = grav_angle_deg / gravity_uncertainty - 1.0;
+    // double reward = 0.5 + 0.5 * std::tanh(grav_angle_deg / gravity_uncertainty - 1.0);
+    // std::cout << reward << "   " << grav_angle_deg << "   " << gravity_uncertainty << std::endl;
     return reward * compute_msac_score(pose, x, X, opt.max_reproj_error * opt.max_reproj_error, inlier_count);
 }
 
